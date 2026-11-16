@@ -1,0 +1,6 @@
+{
+  "manifest": "data/source-manifest.jsonl",
+  "out": "data/my-release",
+  "expected_images": 3,
+  "protected_exams": ["reports/andromeda-noleak-all-models/exam/members.json"]
+}

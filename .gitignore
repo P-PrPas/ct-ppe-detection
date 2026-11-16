@@ -8,9 +8,9 @@ __pycache__/
 .codex/
 .agents/
 .runtime/
-data/
-dataset/
-models/
-runs/
-reports/
+/data/
+/dataset/
+/models/
+/runs/
+/reports/
 *.zip
