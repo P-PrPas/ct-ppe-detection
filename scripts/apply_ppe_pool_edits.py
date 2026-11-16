@@ -3,18 +3,18 @@
 Usage: python3 scripts/apply_ppe_pool_edits.py [--apply]
 Dry-run is the default. Andromeda's database and prompt bank are not modified.
 """
+
 import argparse
-from datetime import datetime, timezone
 import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
 
-from PIL import Image
 import yaml
-
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 POOL = Path("/opt/mount/project/data")
@@ -39,7 +39,9 @@ def matching_rows(lines, names, size, target_class, target_box):
         assert all(math.isfinite(v) for v in (cx, cy, w, h))
         assert cls in names and 0 < w <= 1 and 0 < h <= 1
         box = ((cx - w / 2) * width, (cy - h / 2) * height, w * width, h * height)
-        if names[cls] == target_class and all(abs(a - b) < 1e-5 for a, b in zip(box, target_box)):
+        if names[cls] == target_class and all(
+            abs(a - b) < 1e-5 for a, b in zip(box, target_box)
+        ):
             found.append(i)
     return found
 
@@ -66,21 +68,46 @@ def prepare():
             assert len(found) == 1, f"source changed; expected one old box: {path}"
             x, y, w, h = change["proposed_bbox_xywh"]
             width, height = size
-            assert min(x, y) >= 0 and min(w, h) > 0 and x + w <= width and y + h <= height
+            assert (
+                min(x, y) >= 0 and min(w, h) > 0 and x + w <= width and y + h <= height
+            )
             cls = lines[found[0]].split()[0]
             new_line = f"{cls} {(x + w / 2) / width:.15g} {(y + h / 2) / height:.15g} {w / width:.15g} {h / height:.15g}\n"
             lines[found[0]] = new_line
-            assert len(matching_rows(lines, names, size, change["class"], change["proposed_bbox_xywh"])) == 1
+            assert (
+                len(
+                    matching_rows(
+                        lines,
+                        names,
+                        size,
+                        change["class"],
+                        change["proposed_bbox_xywh"],
+                    )
+                )
+                == 1
+            )
         else:
-            assert len(found) == 2, f"source changed; expected two duplicate boxes: {path}"
+            assert len(found) == 2, (
+                f"source changed; expected two duplicate boxes: {path}"
+            )
             del lines[found[1]]
             assert len(matching_rows(lines, names, size, change["class"], old)) == 1
         after = "".join(lines).encode()
         assert before != after
-        planned.append({"dataset": dataset, "path": str(path), "image": name,
-                        "before_sha256": sha(before), "after_sha256": sha(after),
-                        "before_lines": len(before.splitlines()), "after_lines": len(after.splitlines()),
-                        "before_bytes": before, "after_bytes": after, "status": "planned"})
+        planned.append(
+            {
+                "dataset": dataset,
+                "path": str(path),
+                "image": name,
+                "before_sha256": sha(before),
+                "after_sha256": sha(after),
+                "before_lines": len(before.splitlines()),
+                "after_lines": len(after.splitlines()),
+                "before_bytes": before,
+                "after_bytes": after,
+                "status": "planned",
+            }
+        )
     assert len({x["path"] for x in planned}) == 3
     return planned
 
@@ -90,7 +117,9 @@ def main():
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     planned = prepare()
-    public = lambda: [{k: v for k, v in r.items() if not k.endswith("_bytes")} for r in planned]
+    public = lambda: [
+        {k: v for k, v in r.items() if not k.endswith("_bytes")} for r in planned
+    ]
     if not args.apply:
         print(json.dumps(public(), indent=2))
         return
@@ -109,14 +138,20 @@ def main():
     for record in planned:
         path = Path(record["path"])
         # Refuse to overwrite another teammate's edit after preflight.
-        assert sha(path.read_bytes()) == record["before_sha256"], f"concurrent source edit: {path}"
+        assert sha(path.read_bytes()) == record["before_sha256"], (
+            f"concurrent source edit: {path}"
+        )
         temporary = None
         try:
-            with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".ppe-edit-", suffix=".tmp", delete=False) as f:
+            with tempfile.NamedTemporaryFile(
+                dir=path.parent, prefix=".ppe-edit-", suffix=".tmp", delete=False
+            ) as f:
                 temporary = Path(f.name)
                 f.write(record["after_bytes"])
             assert sha(temporary.read_bytes()) == record["after_sha256"]
-            assert sha(path.read_bytes()) == record["before_sha256"], f"concurrent source edit: {path}"
+            assert sha(path.read_bytes()) == record["before_sha256"], (
+                f"concurrent source edit: {path}"
+            )
             os.replace(temporary, path)
             temporary = None
             assert sha(path.read_bytes()) == record["after_sha256"]

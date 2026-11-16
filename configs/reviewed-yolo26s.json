@@ -1,0 +1,45 @@
+{
+  "data": "data/ppe-reviewed-2250",
+  "run": "runs/ppe-reviewed-2250-yolo26s-20261110",
+  "weights": "models/yolo26s.pt",
+  "gpu": 1,
+  "eval_batch": 4,
+  "validation": {
+    "images": 2250,
+    "counts": {
+      "train": 1883,
+      "val": 179,
+      "test": 188
+    },
+    "baseline": "data/ppe-full-current-20261109"
+  },
+  "train": {
+    "epochs": 100,
+    "patience": 20,
+    "seed": 42,
+    "workers": 4,
+    "save": true,
+    "save_period": 1,
+    "amp": true,
+    "mosaic": 0.5,
+    "close_mosaic": 10,
+    "mixup": 0,
+    "copy_paste": 0,
+    "degrees": 5,
+    "translate": 0.1,
+    "scale": 0.3,
+    "shear": 0,
+    "perspective": 0,
+    "fliplr": 0.5,
+    "flipud": 0,
+    "hsv_h": 0.015,
+    "hsv_s": 0.5,
+    "hsv_v": 0.3,
+    "imgsz": 640,
+    "batch": 4,
+    "optimizer": "MuSGD",
+    "lr0": 0.01,
+    "momentum": 0.9
+  },
+  "preflight": "reports/ppe-yolo26-reviewed-sequence/preflight.json"
+}
