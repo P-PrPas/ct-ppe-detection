@@ -9,11 +9,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import benchmark_submission as benchmark
-import dataset_release
-import release_validation as validation
-import train
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core import benchmark, validation
+from core import training as train
+from legacy import dataset_release
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -53,7 +52,9 @@ class Workflows(unittest.TestCase):
         )
         self.weights = self.root / "model.pt"
         self.weights.write_bytes(b"weights")
-        self.recipe = train.load_recipe(REPO / "configs/full-yolo26s.json", self.root)
+        self.recipe = train.load_recipe(
+            REPO / "configs/train/full-yolo26s.json", self.root
+        )
         self.recipe.update(
             data=str(self.data), weights=str(self.weights), validation=dict(images=3)
         )
@@ -210,7 +211,9 @@ class Workflows(unittest.TestCase):
             "expanded-latest-l": ("yolo26l", 960, 2, 22709),
         }
         for name, values in expected.items():
-            recipe = train.load_recipe(REPO / "configs" / (name + ".json"), self.root)
+            recipe = train.load_recipe(
+                REPO / "configs/train" / (name + ".json"), self.root
+            )
             settings = recipe["train"]
             self.assertEqual(
                 (
@@ -312,9 +315,9 @@ class Workflows(unittest.TestCase):
                 benchmark.validate_predictions(predictions, members, {"Helmet"})
 
     def test_shared_modules_import_without_gpu_or_filesystem_side_effects(self):
-        code = "import os,sys; sys.path.insert(0, sys.argv[1]); os.environ['CUDA_VISIBLE_DEVICES']='sentinel'; import train,dataset_release,benchmark_submission; assert os.environ['CUDA_VISIBLE_DEVICES']=='sentinel'; assert 'torch' not in sys.modules; assert 'ultralytics' not in sys.modules"
+        code = "import os,sys; sys.path.insert(0, sys.argv[1]); os.environ['CUDA_VISIBLE_DEVICES']='sentinel'; import core.training,core.datasets,core.benchmark; assert os.environ['CUDA_VISIBLE_DEVICES']=='sentinel'; assert 'torch' not in sys.modules; assert 'ultralytics' not in sys.modules"
         subprocess.run(
-            [sys.executable, "-c", code, str(REPO / "scripts")],
+            [sys.executable, "-c", code, str(REPO)],
             cwd=self.root,
             check=True,
         )
@@ -323,8 +326,9 @@ class Workflows(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(REPO / "scripts/train.py"),
-                *[str(p) for p in sorted((REPO / "configs").glob("*.json"))],
+                str(REPO / "ppe.py"),
+                "train",
+                *[str(p) for p in sorted((REPO / "configs/train").glob("*.json"))],
                 "--dry-run",
             ],
             capture_output=True,

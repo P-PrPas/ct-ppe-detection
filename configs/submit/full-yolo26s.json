@@ -1,0 +1,13 @@
+{
+  "project": 101,
+  "definition": "3",
+  "expected_images": 5443,
+  "out": "reports/andromeda-positive-fullcurrent-yolo26s",
+  "exam": "reports/andromeda-benchmark-positive/exam",
+  "weights": "runs/ppe-full-current-10030-yolo26s-20261111/weights/best.pt",
+  "name": "yolo26s-fullcurrent10030-20261111",
+  "version": "best-validation",
+  "imgsz": 640,
+  "gpu": 1,
+  "device": "0"
+}

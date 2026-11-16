@@ -7,8 +7,9 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import yaml
-from apply_verified_ppe_labels import validate_labels
 from PIL import Image
+
+from legacy.apply_verified_ppe_labels import validate_labels
 
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / "data/ppe-verified-20261109"

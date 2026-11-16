@@ -1,6 +1,6 @@
 """Audit Andromeda COCO snapshots and prepare a draft; never edit source labels.
 
-Usage: python3 scripts/prepare_ppe_dataset.py
+Usage: python3 legacy/prepare_ppe_dataset.py
 The draft is deliberately gated until central annotation edits and a visual
 completeness review have been verified. It is not a training release.
 """

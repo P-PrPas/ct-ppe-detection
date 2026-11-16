@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from dataset_release import build_append
+from legacy.dataset_release import build_append
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "data/ppe-expanded-eight-sources-20261115"

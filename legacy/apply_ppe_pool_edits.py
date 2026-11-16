@@ -1,6 +1,6 @@
 """Apply the three reviewed label edits to the shared YOLO files, with backups.
 
-Usage: python3 scripts/apply_ppe_pool_edits.py [--apply]
+Usage: python3 legacy/apply_ppe_pool_edits.py [--apply]
 Dry-run is the default. Andromeda's database and prompt bank are not modified.
 """
 

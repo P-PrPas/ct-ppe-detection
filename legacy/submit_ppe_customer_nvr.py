@@ -1,9 +1,9 @@
-from benchmark_submission import submit_confirmed, validate_predictions
+from core.benchmark import submit_confirmed, validate_predictions
 
 """Score all distinct trained PPE best checkpoints on frozen customer-nvr snapshot2."""
 import os
 
-from release_validation import require
+from core.validation import require
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import gc

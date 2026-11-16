@@ -6,7 +6,8 @@ from collections import Counter
 from pathlib import Path
 
 import yaml
-from apply_verified_ppe_labels import REPORTS, digest, validate_labels
+
+from legacy.apply_verified_ppe_labels import REPORTS, digest, validate_labels
 
 
 def first(row, *keys):

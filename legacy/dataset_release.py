@@ -11,10 +11,11 @@ from pathlib import Path
 
 import yaml
 from PIL import Image
-from release_validation import require
+
+from core.validation import require
 
 ROOT = Path(__file__).resolve().parents[1]
-from release_validation import CLASSES
+from core.validation import CLASSES
 
 
 def digest(p):

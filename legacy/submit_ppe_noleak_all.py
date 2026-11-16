@@ -1,9 +1,9 @@
-from benchmark_submission import submit_confirmed, validate_predictions
+from core.benchmark import submit_confirmed, validate_predictions
 
 """Submit each distinct trained best checkpoint to frozen project102/exam4, once."""
 import os
 
-from release_validation import require
+from core.validation import require
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import gc

@@ -1,14 +1,12 @@
-"""One entry point for PPE experiments. Recipe paths are relative to --root."""
+"""Reusable training lifecycle. Recipe paths are relative to the supplied root."""
 
-import argparse
 import json
-import os
 import pickle
 import time
 from collections import Counter
 from pathlib import Path
 
-from release_validation import CLASSES, digest, require, verify_release
+from core.validation import CLASSES, digest, require, verify_release
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -279,42 +277,3 @@ def run_experiment(recipe, root, torch, yolo):
     except BaseException as error:
         state("failed", error=repr(error), phase=phase)
         raise
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "recipes", nargs="+", type=Path, help="JSON recipe(s), executed in order"
-    )
-    parser.add_argument(
-        "--root",
-        type=Path,
-        default=ROOT,
-        help="Dataset/model/output root; defaults to repository root",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print resolved recipes without importing CUDA or writing files",
-    )
-    args = parser.parse_args()
-    recipes = [load_recipe(path, args.root.resolve()) for path in args.recipes]
-    require(
-        len({recipe["gpu"] for recipe in recipes}) == 1,
-        "Sequential recipes must use the same physical GPU",
-    )
-    if args.dry_run:
-        print(json.dumps(recipes, indent=2))
-        return
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(recipes[0]["gpu"])
-    os.environ["WANDB_MODE"] = "disabled"
-    import torch
-    from ultralytics import YOLO
-
-    for recipe in recipes:
-        run_experiment(recipe, args.root.resolve(), torch, YOLO)
-        torch.cuda.empty_cache()
-
-
-if __name__ == "__main__":
-    main()

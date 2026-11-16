@@ -1,114 +1,126 @@
-# PPE Detection
+# PPE experiments
 
-โค้ดเทรนและประเมิน PPE ด้วย Ultralytics YOLO11/YOLO26 ใช้ **`scripts/train.py` ไฟล์เดียว** สำหรับทุก experiment ที่มีใน repo
+ให้ agent รับคำสั่ง **สร้าง dataset → train → submit** ผ่านคำสั่งกลาง โดยแก้รายละเอียดการทดลองใน config และใช้ implementation ใน `core/` ร่วมกัน
 
-## เริ่มอ่านจากตรงไหน
+```text
+ppe.py                  # ทางเข้าหลักเดียว: dataset / train / submit
+core/
+  datasets.py           # freeze source manifest เป็น YOLO release
+  training.py           # train/resume/evaluate และ state
+  benchmark.py          # predict/validate/submit/confirm
+  validation.py         # class order, hashes, split และ release guards
+configs/
+  dataset/              # ข้อมูลและ output ของ dataset
+  train/                # model, release, GPU และ training recipe
+  submit/               # checkpoint, exam และ Andromeda target
+legacy/                 # งานเฉพาะกิจเก่า ใช้เฉพาะเมื่อต้อง reproduce
+tests/                 # CPU regression tests
+AGENTS.md               # ลำดับทำงานสำหรับ agent
+```
 
-- `configs/*.json` — dataset, weights, GPU, batch, resolution และค่าการเทรน แก้ที่นี่เมื่อต้องการเปลี่ยน experiment
-- `scripts/train.py` — ตรวจ recipe → ตรวจข้อมูล → train/resume → heldout evaluation → บันทึกสถานะ
-- `scripts/release_validation.py` — class order, frozen hashes, split membership และ release guards
-- `scripts/dataset_release.py` — การอ่าน label, รวม family/ภาพซ้ำ และสร้าง release ที่เพิ่มข้อมูลโดยคง core evaluation
-- `scripts/benchmark_submission.py` — ตรวจ predictions และยืนยันผลส่งจาก Andromeda ก่อน retry
-- `tests/test_workflows.py` — ทดสอบด้วย fixture เล็กและ fake YOLO โดยไม่ใช้ GPU/ส่งข้อมูลขึ้น server
+## คำสั่งที่ใช้ประจำ
 
-สคริปต์เตรียมข้อมูล/รายงานอื่นอยู่ใน `scripts/` ชื่อเดิม โค้ดถูกจัดรูปแบบให้คำสั่งและ control flow แยกบรรทัด อ่านและแก้ด้วยมือได้
+```bash
+python ppe.py dataset configs/dataset/example.json --dry-run
+python ppe.py train configs/train/expanded-latest-l.json --dry-run
+python ppe.py submit configs/submit/full-yolo26s.json --dry-run
+```
 
-## Environment และข้อมูล
+เอา `--dry-run` ออกเมื่อต้องการรันจริง โหมดนี้แสดง config ที่ resolve แล้วเท่านั้น ไม่ตรวจว่าข้อมูลมีจริง ไม่เรียก CUDA ไม่ติดต่อ server และไม่เขียนผลลัพธ์
 
-ใช้ Python 3.11+ และ environment GPU เดิมที่ผ่าน calibration ก่อน Repo ไม่รวม `.env`, dataset, model weights, runs หรือ reports ต้องจัดเตรียมไฟล์เหล่านี้แยกต่างหาก
+ส่งหลาย config ให้คำสั่งเดียวได้ จะทำตามลำดับและหยุดเมื่อมี error งาน train/submit ใน process เดียวกันต้องใช้ physical GPU เดียวกัน
 
-`requirements.txt` บันทึกเวอร์ชัน dependency หลักจาก metadata ของ environment เดิม ไม่ใช่ผลทดสอบการติดตั้งใหม่ PyTorch เดิมคือ `2.11.0+cu126`; ต้องใช้ build ที่ตรงกับ CUDA/driver ของเครื่อง ห้ามเปลี่ยน environment ของงานเทรนที่ยังทำงานอยู่เพียงเพื่อใช้ refactor นี้
+Path ใน config อ้างจาก root ของ repo; `--root /path/to/workspace` เปลี่ยน root ของข้อมูลและ outputs ส่วน path ของไฟล์ config ที่ส่งให้ CLI อ้างจาก working directory ตามปกติ
 
-เครื่อง V100 เดิมใช้ library directory นี้ก่อนเริ่ม Python:
+## สร้าง dataset ใหม่
+
+Copy `configs/dataset/example.json` แล้วระบุ:
+
+- `manifest`: JSONL index ของภาพ/labels ที่ผ่านการคัดเลือก
+- `out`: directory ใหม่ที่จะสร้าง release
+- `expected_images`: จำนวนภาพที่คาดไว้
+- `protected_exams`: รายการ `members.json` ของ benchmark ที่ต้องกันออกจาก train/val; ใส่ `[]` ได้เมื่อไม่มี benchmark ที่ต้องป้องกัน โดยผลลัพธ์จะบันทึกขอบเขตนี้ไว้
+
+หนึ่งบรรทัดใน source manifest:
+
+```json
+{"image":"source/images/a.jpg","label":"source/labels/a.txt","group":"camera1-scene42","split":"train","names":["Helmet","Vest"]}
+```
+
+`image`/`label` อ้างจาก directory ของ manifest หรือใช้ absolute path; `names` คือ class order ของต้นทาง ถ้าไม่ระบุจะใช้ PPE 11 classes ใน `core/validation.py` ระบุ `image_sha256`/`label_sha256` เพิ่มได้เพื่อบังคับตรวจ frozen input
+
+ต้องมีภาพใน `train`, `val`, `test` และระบุ family group ให้ถูกต้อง ภาพเดียวกันหรือ family เดียวกันห้ามข้าม split ตัว builder **ไม่สุ่ม split และไม่เดาว่าภาพมาจาก scene เดียวกัน**: agent ต้องกำหนดจาก provenance/ข้อกำหนดการทดลองก่อน หากเป็น benchmark family/video ให้ทั้งกลุ่มอยู่ test
+
+Labels ต้องเป็น YOLO detection boxes; class ที่ไม่อยู่ใน PPE taxonomy จะถูกปฏิเสธเพื่อให้ review อย่างชัดเจน ไม่มีการทิ้ง negative classes หรือแก้ label อัตโนมัติ ภาพที่มีไฟล์ label ว่างยังเก็บไว้
+
+ผลลัพธ์คือ `images/`, `labels/`, `data.yaml`, `manifest.jsonl`, `summary.json`, `build-config.json` สร้างใน staging แล้ว publish เมื่อผ่าน checks ทั้งหมด; ไม่แก้ source และปฏิเสธ output ที่มีอยู่แล้ว
+
+การ append release เก่าที่ต้องคง core evaluation, extra heldouts หรือ quarantine เฉพาะแหล่งข้อมูล ใช้ policy ที่บันทึกใน `legacy/README.md` ก่อน Generic builder ไม่ใช่ตัวแทนของกฎ review เหล่านั้น
+
+## เทรน
+
+Copy recipe ที่ใกล้เคียงใน `configs/train/` แล้วเปลี่ยน `data`, `run`, `weights`, `gpu`, `train`, `eval_batch` และ `validation` ให้ตรงกับ release ตัวอย่าง validation สำหรับ release ใหม่ 3 ภาพ:
+
+```json
+{"images":3,"counts":{"train":1,"val":1,"test":1}}
+```
+
+สำหรับ release เดิมให้เก็บ guards ใน recipe เดิมครบ เช่น baseline split, frozen reference, core evaluation และ expanded summary อย่าลด guards เพียงเพื่อให้ข้อมูลที่เปลี่ยนผ่าน
+
+ทุก experiment ใหม่ใช้ `run` ใหม่ หาก recipe มี `state`/`metrics` ระบุเองต้องเปลี่ยนด้วย การเรียก recipe เดิมซ้ำเป็น resume: ใช้ checkpoint ที่ยังมี optimizer state, ไม่เทรนซ้ำเมื่อ complete และ retry evaluation ได้โดยไม่เทรนใหม่
+
+Artifacts หลัก:
+
+- `resolved-recipe.json` และ `input-hashes.jsonl`: ค่ากับ inputs ที่ใช้จริง
+- `training-state.json`: starting/training/evaluating/complete/failed
+- `weights/best.pt`, `test-metrics.json`: checkpoint ที่เลือกด้วย validation และ heldout metrics
+- Reviewed YOLO11 ยังมี baseline comparison บน test ชุดเดียวกัน
+
+คง path metrics/state เก่าของ full/reviewed YOLO11 ใน configs เพื่อให้รายงานเดิมอ่านได้ การเทรนไม่เรียก submit อัตโนมัติ
+
+## Submit
+
+Copy `configs/submit/full-yolo26s.json` แล้วระบุ target, frozen `exam`, `weights`, output, candidate name, version, resolution และ GPU ให้ตรงกัน Output directory ต้องมี `preparation.json` ที่บันทึกการเตรียม exam เดิม
+
+คำสั่งตรวจ definition, จำนวนภาพ, image hashes, classes, boxes และ sample coverage ก่อนส่ง ใช้ threshold เดิมที่ freeze ไว้ ไม่ปรับจากคะแนน benchmark โดย flow นี้รองรับ exam แบบ test-only ที่ min_conf/IoU 0.5 และ model classes อยู่ใน benchmark classes; customer-NVR/drop-unmapped และ cached multi-model workflow เดิมอยู่ใน legacy
+
+เมื่อส่งสำเร็จต้องมี `confirmed-server-run.json`; receipt หรือ pending ที่ server ไม่พบเป็นสถานะกำกวม ต้อง reconcile ก่อน retry ห้ามลบ receipt แล้วส่งใหม่โดยยังไม่ตรวจ server
+
+## เรียกจาก Python
+
+CLI กับ agent ใช้ implementation เดียวกันได้โดยตรง:
+
+```python
+from core.datasets import build_release
+from core.training import load_recipe, run_experiment
+from core.benchmark import predict_submit
+```
+
+`build_release` รับ config ที่ resolve path แล้ว; `load_recipe` resolve training paths; `run_experiment`/`predict_submit` รับ Torch และ YOLO ที่ caller เตรียมไว้ จึงทดสอบโดยไม่ใช้ GPU ได้ ปกติให้ agent ใช้ CLI ซึ่งจัด GPU visibility ก่อน import Torch ให้แล้ว
+
+## Environment และการตรวจงาน
+
+ใช้ Python 3.11+ กับ environment GPU เดิมที่ผ่าน calibration `requirements.txt` มาจาก metadata ของ environment เดิม ไม่ใช่ผลทดสอบติดตั้งใหม่ PyTorch เดิมคือ `2.11.0+cu126` และต้องตรงกับ CUDA/driver
+
+เครื่อง V100 เดิมตั้งค่าก่อนเรียก CLI:
 
 ```bash
 export LD_LIBRARY_PATH="$PWD/.runtime/nvidia-580.95.05/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+.venv-ppe-v100/bin/python -u ppe.py train configs/train/expanded-latest-l.json
 ```
 
-Recipe ระบุ physical GPU ด้วย `gpu` โดย trainer เห็น logical device `0` หลังตั้ง `CUDA_VISIBLE_DEVICES` ก่อน import Torch ค่าเดิมคือ physical GPU `1`; expanded recipes ตรวจหน่วยความจำว่างอย่างน้อย 6 GiB คง batch เดิมไว้จนกว่าจะทดสอบ hardware ใหม่
-
-## เทรนด้วย script เดียว
-
-ตรวจค่าก่อนโดยไม่แตะ CUDA หรือเขียนผลลัพธ์:
-
-```bash
-python scripts/train.py configs/expanded-latest-l.json --dry-run
-```
-
-รันจริงใน environment เดิม:
-
-```bash
-.venv-ppe-v100/bin/python -u scripts/train.py configs/expanded-latest-l.json
-```
-
-เมื่อต้องการทดลองใหม่ ให้ copy recipe แล้วเปลี่ยน `run` เป็น directory ใหม่ก่อนเปลี่ยนค่าการเทรน ค่า `state`/`metrics` ที่ระบุเองต้องเปลี่ยนให้ตรงด้วย ส่วน `validation` ต้องสะท้อน dataset release จริง ห้ามลดข้อกำหนดเพื่อให้ข้อมูลที่ผิดผ่าน
-
-Path ภายใน recipe อ้างจาก root ของ repo ไม่ใช่จาก directory ของ JSON; `--root /path/to/PPE-Detection` เปลี่ยน root ได้ แต่ path แบบ absolute ที่ฝังใน manifest/data.yaml ต้องยังเข้าถึงได้ ใช้ `--root` อย่างระมัดระวังเพราะ outputs จะเขียนที่ root นั้นด้วย
-
-ส่งหลาย recipe เพื่อเทรนเรียงลำดับได้ (ต้องใช้ GPU เดียวกัน):
-
-```bash
-python scripts/train.py configs/reviewed-yolo26s.json configs/reviewed-yolo26m.json
-```
-
-Reviewed YOLO26 ยังต้องมี `reports/ppe-yolo26-reviewed-sequence/preflight.json` ที่ยืนยัน forward/backward batch 4 ผ่านทั้งสองรุ่น การเทรนไม่ส่ง benchmark อัตโนมัติอีกต่อไป
-
-## ย้ายจากคำสั่งเก่า
-
-| Python script เดิม / shell launcher เดิม | Recipe สำหรับ `python scripts/train.py` |
-| --- | --- |
-| `train_ppe_full_current.py` | `configs/full-yolo11s.json` |
-| `train_ppe_reviewed.py` | `configs/reviewed-yolo11s.json` |
-| `train_ppe_yolo26_sequence.py` | `configs/reviewed-yolo26s.json` และ `configs/reviewed-yolo26m.json` |
-| `train_ppe_yolo26_full.py` | `configs/full-yolo26s.json` |
-| `train_ppe_yolo26_960.py` | `configs/full-yolo26s-960.json` |
-| `train_ppe_expanded.py` | `configs/expanded-five.json` |
-| `train_ppe_next_three.py` | `configs/expanded-eight.json` |
-| `train_ppe_four_more.py` / `run_ppe_four_more.sh` | `configs/expanded-latest-s.json` |
-| `train_ppe_four_more_l.py` / `run_ppe_four_more_l.sh` | `configs/expanded-latest-l.json` |
-
-Recipe เก็บ run directory, model, batch, optimizer, augmentation และ resolution เดิม แต่โค้ดจะตรวจ image hashes เพิ่มเติม และหยุดเมื่อ input หรือ recipe ของ run เดิมเปลี่ยน
-
-## Resume และ artifacts
-
-- เรียกคำสั่งเดิมเพื่อ resume; ลอง `last.pt` ก่อน แล้ว checkpoint ราย epoch ที่ใหม่สุดและยังมี optimizer state หากไม่มี checkpoint ที่ใช้ได้จะหยุด ไม่เริ่มใหม่ทับผลเดิม
-- Run ที่สถานะ `complete` จะไม่เทรน/ประเมินซ้ำ ต้องมี best checkpoint และ metrics อยู่ครบ
-- หากล้มระหว่าง evaluation ให้เรียกเดิมเพื่อประเมินต่อจาก best checkpoint โดยไม่เทรนซ้ำ
-- `resolved-recipe.json` บันทึก recipe และ hash ที่ใช้จริง; `input-hashes.jsonl` ตรึง input; `training-state.json` บอกสถานะ; `test-metrics.json` มี overall/per-class metrics
-- Full YOLO11 เก็บ state/metrics ใน dataset directory เดิม และ reviewed YOLO11 เก็บ metrics ใน dataset directory เดิม เพื่อให้ report readers ยังทำงาน
-- Reviewed YOLO11 ยังประเมิน baseline บน reviewed test ชุดเดียวกัน และเขียน `comparison.json`
-- ไม่เขียนทับ `experiment.json` เก่าที่มี provenance อยู่แล้ว; run ใหม่บันทึกค่าที่ใช้จริงพร้อม recipe
-- Best checkpoint เลือกจาก validation; test ใช้ประเมินหลังเทรน ไม่มีการปรับค่าจากคะแนน benchmark
-
-## Dataset release
-
-ใช้ `build_ppe_expanded.py`, `build_ppe_next_three.py`, `build_ppe_four_more.py` สำหรับ release เดิม แต่ next-three/four-more เรียกกลไก `build_append` ร่วมกัน กฎ source review ต่างกันจึงยังระบุชัดเจนใน module เดียว
-
-คงการปฏิเสธ overwrite, benchmark family/hash/video protection, semantic quarantine, ภาพ extra heldout และ core validation/test hashes ไว้ครบ การรวม family ยังรักษาลำดับ union เดิม เพราะลำดับนี้มีผลต่อ seeded split
-
-## Benchmark เป็นขั้นตอนแยก
-
-ใช้สคริปต์ submit เดิมหลังเทรนเสร็จ การส่งต้องมี frozen exam และ preparation ที่ถูกต้องอยู่ก่อน ตัวอย่าง full YOLO26s ที่เดิมส่งอัตโนมัติ:
-
-```bash
-python scripts/submit_ppe_benchmark98.py \
-  --project 101 --definition 3 --expected-images 5443 \
-  --out reports/andromeda-positive-fullcurrent-yolo26s \
-  --weights runs/ppe-full-current-10030-yolo26s-20261111/weights/best.pt \
-  --device 0 --name yolo26s-fullcurrent10030-20261111 --version best-validation
-```
-
-Directory `--out` ต้องมี `exam` snapshot และ `preparation.json`; trainer ไม่สร้างสิ่งเหล่านี้แล้ว หากต้องการลำดับ train → submit → train → submit ให้เรียกแต่ละคำสั่งสลับกันอย่างชัดเจน Summary เฉพาะ sequence (`results.json`/`experiment-state.json`) เดิมถูกแทนด้วย state/metrics ของแต่ละ run และ confirmed-server-run ของแต่ละ submission
-
-ทุก submission ตรวจ checkpoint hash กับ config, บันทึก intent ก่อนส่ง และยืนยัน server run หลังส่ง หากมี receipt/pending แต่ server ไม่พบ จะหยุดให้ตรวจสอบ ไม่ retry อัตโนมัติ การลบ receipt โดยไม่ตรวจ server อาจทำให้ส่งซ้ำได้
-
-## ตรวจงานก่อนแก้/ส่ง
+`gpu` ระบุ physical GPU; CUDA device ใน trainer เป็น logical `0` ค่า batch และ memory guard เดิมยังอยู่ใน recipes ข้อมูล, weights, runs, reports และ secrets ไม่อยู่ใน Git
 
 ```bash
 python -m unittest discover -s tests -v
-python -m compileall -q scripts
-uv tool run ruff check scripts tests --select F,I
-uv tool run ruff format --check scripts tests
+python -O -m unittest discover -s tests -q
+python -m compileall -q ppe.py core legacy
+uv tool run ruff check ppe.py core legacy tests --select F,I
+uv tool run ruff format --check ppe.py core legacy tests
 ```
 
-การทดสอบนี้ไม่ยืนยันผล GPU training เต็มรอบ, throughput หรือคะแนนโมเดล และไม่ได้สร้าง dataset ขนาดจริงหรือส่ง benchmark จริง
+Tests ใช้ภาพเล็กจริงและ fake model/server ไม่ยืนยัน GPU performance, คะแนนโมเดล หรือ full historical dataset rebuild
+
+## ย้ายจาก PR รุ่นแรก
+
+`python scripts/train.py configs/X.json` เปลี่ยนเป็น `python ppe.py train configs/train/X.json` การ submit เดี่ยวใช้ `ppe.py submit`; สคริปต์อื่นถูกย้ายไป `legacy/` และเรียกด้วย `python -m legacy.<ชื่อไฟล์>` ดูรายละเอียดใน `legacy/README.md`

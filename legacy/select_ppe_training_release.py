@@ -7,7 +7,8 @@ from collections import Counter
 from pathlib import Path
 
 import yaml
-from apply_verified_ppe_labels import REPORTS, validate_labels
+
+from legacy.apply_verified_ppe_labels import REPORTS, validate_labels
 
 ROOT = REPORTS.parent.parent
 OUT = ROOT / "data/ppe-verified-20261109"

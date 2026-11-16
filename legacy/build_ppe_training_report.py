@@ -690,7 +690,7 @@ table(
 )
 para("SHA256 best.pt: <code>" + E["model_sha256"] + "</code>")
 para(
-    "สร้างข้อมูลประกอบซ้ำด้วย .venv-ppe-v100/bin/python scripts/collect_ppe_report_metrics.py แล้ว python scripts/build_ppe_training_report.py การรัน evaluator ซ้ำควรใช้โฟลเดอร์ output ใหม่เพื่อไม่ให้ save_txt append predictions ซ้ำ"
+    "สร้างข้อมูลประกอบซ้ำด้วย .venv-ppe-v100/bin/python legacy/collect_ppe_report_metrics.py แล้ว python legacy/build_ppe_training_report.py การรัน evaluator ซ้ำควรใช้โฟลเดอร์ output ใหม่เพื่อไม่ให้ save_txt append predictions ซ้ำ"
 )
 SCRIPT = """const curves=CURVEDATA;const q=document.getElementById('confidence'),s=document.getElementById('curveClass');function update(){const i=+q.value,cls=s.value;const vals=['p','r','f1'].map(k=>cls==='all'?curves[k].reduce((a,r)=>a+r[i],0)/curves[k].length:curves[k][+cls][i]);document.getElementById('curveReadout').textContent=`Confidence ${curves.px[i].toFixed(3)} · Precision ${vals[0].toFixed(3)} · Recall ${vals[1].toFixed(3)} · F1 ${vals[2].toFixed(3)}`;}q.oninput=update;s.onchange=update;update();""".replace(
     "CURVEDATA", json.dumps({k: Z[k].round(6).tolist() for k in ["px", "p", "r", "f1"]})

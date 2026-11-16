@@ -9,13 +9,14 @@ from pathlib import Path
 
 import yaml
 from PIL import Image
-from release_validation import require
+
+from core.validation import require
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = ROOT / "reports/ppe-expansion-build-20261114"
 OUT = ROOT / "data/ppe-expanded-five-sources-20261114"
 BASE = ROOT / "data/ppe-full-current-20261109"
-from dataset_release import CLASSES, connected_groups, digest, family, parse
+from legacy.dataset_release import CLASSES, connected_groups, digest, family, parse
 
 
 def main():
